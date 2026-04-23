@@ -11,52 +11,70 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout Code
       - name: Checkout source
         uses: actions/checkout@v4
 
-      # 2. Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      # 3. Install Dependencies
-      - name: Install project dependencies
+      - name: Install dependencies
         run: npm install
 
-      # 4. Install CAP tools
-      - name: Install CAP build tools
-        run: npm install -g @sap/cds-dk mbt
+      - name: Install CAP tools
+        run: |
+          npm install -g @sap/cds-dk mbt
 
-      # 5. Build CAP project
-      - name: Build CAP project for production
-        run: npx cds build --production
+      - name: Build CAP project
+        run: |
+          npx cds build --production
+          echo "--- Checking gen/ folder ---"
+          ls -la gen/ || echo "gen/ folder not found!"
+          ls -la gen/db/ || echo "gen/db/ folder not found!"
 
-      # 6. Build MTA archive
       - name: Build MTA archive
         run: mbt build
 
-      # 7. Install Cloud Foundry CLI (Official way ✅)
-      - name: Install CF CLI
-        uses: cloudfoundry/cf-cli-action@v2
+      - name: Install Cloud Foundry CLI
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf 2>/dev/null || sudo mv cf /usr/local/bin/cf
+          cf version
 
-      # 8. Install MultiApps Plugin
       - name: Install MultiApps plugin
         run: |
           cf add-plugin-repo CF-Community https://plugins.cloudfoundry.org || true
           cf install-plugin multiapps -f
           cf plugins
 
-      # 9. Login to Cloud Foundry
       - name: Login to Cloud Foundry
         run: |
           cf api "${{ secrets.CF_API }}"
           cf auth "${{ secrets.CF_USERNAME }}" "${{ secrets.CF_PASSWORD }}"
           cf target -o "${{ secrets.CF_ORG }}" -s "${{ secrets.CF_SPACE }}"
 
-      # 10. Deploy MTA
-      - name: Deploy MTA to Cloud Foundry
+      - name: Check CF services
         run: |
-          cf deploy mta_archives/*.mtar -f
+          echo "--- Available services ---"
+          cf services
+          echo "--- HANA DB service detail ---"
+          cf service employee-crud-app-db || echo "Service not found!"
+
+      - name: Deploy MTA
+        id: deploy_mta
+        run: cf deploy mta_archives/*.mtar -f
+        continue-on-error: true
+
+      - name: Fetch DB Deployer logs on failure
+        if: steps.deploy_mta.outcome == 'failure'
+        run: |
+          echo "--- DB Deployer recent logs ---"
+          cf logs employee-crud-app-db-deployer --recent || echo "Could not fetch logs"
+          echo "--- App env (check bindings) ---"
+          cf env employee-crud-app-db-deployer || echo "Could not fetch env"
+
+      - name: Fail pipeline if deploy failed
+        if: steps.deploy_mta.outcome == 'failure'
+        run: exit 1
