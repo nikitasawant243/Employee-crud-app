@@ -5,7 +5,7 @@ on:
     branches:
       - main
   workflow_dispatch:
-# fefef
+
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
@@ -48,9 +48,9 @@ jobs:
 
       - name: Login to Cloud Foundry
         run: |
-          cf api "${{ secrets.https://api.cf.ap21.hana.ondemand.com }}"
-          cf auth "${{ secrets.nikitasawant243@gmail.com }}" "${{ secrets.Nikkis@04! }}"
-          cf target -o "${{ secrets.b6b04513trial }}" -s "${{ secrets.dev }}"
+          cf api "${{ secrets.CF_API }}"
+          cf auth "${{ secrets.CF_USERNAME }}" "${{ secrets.CF_PASSWORD }}"
+          cf target -o "${{ secrets.CF_ORG }}" -s "${{ secrets.CF_SPACE }}"
 
       - name: Deploy MTA to Cloud Foundry
         run: |
